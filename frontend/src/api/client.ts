@@ -5,15 +5,20 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 export const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 60000, // 60s timeout for ML training requests
+  timeout: 15000, // 15s timeout for API requests
   headers: { 'Content-Type': 'application/json' },
 })
 
-// Global error interceptor — logs errors but lets components handle display
+// Global error interceptor — logs errors and formats user-friendly message
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    const msg = err.response?.data?.detail || err.message || 'Unknown error'
+    let msg = err.response?.data?.detail || err.message || 'Unknown error'
+    if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+      msg = 'Backend server timeout. Please check your backend URL connection.'
+    } else if (err.code === 'ERR_NETWORK') {
+      msg = 'Network error: Cannot reach backend server. Please verify backend service URL.'
+    }
     console.error('[API Error]', err.config?.url, msg)
     return Promise.reject(err)
   }
