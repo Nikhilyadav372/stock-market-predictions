@@ -1,0 +1,72 @@
+# === Secrets ===
+.env
+*.env.local
+*.env.production
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+dist/
+build/
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.log
+
+# === Node / Frontend ===
+node_modules/
+frontend/dist/
+frontend/.env
+.pnp
+.pnp.js
+.npm
+
+# === ML Artifacts (large binaries) ===
+models/*.pkl
+models/*.pt
+models/*.h5
+models/*.joblib
+models/*.pb
+# Keep the directory structure
+!models/.gitkeep
+
+# === Data ===
+*.db
+*.sqlite
+data/raw/*.csv
+data/processed/*.csv
+# Keep sample data
+!data/sample/
+
+# === Notebooks ===
+.ipynb_checkpoints/
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Docker volumes ===
+postgres_data/
+
+# === Temporary ===
+tmp/
+temp/
+*.tmp

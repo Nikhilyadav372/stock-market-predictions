@@ -1,0 +1,50 @@
+# Core API
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+pydantic==2.7.1
+pydantic-settings==2.3.0
+python-multipart==0.0.9
+
+# Database
+sqlalchemy==2.0.30
+alembic==1.13.1
+psycopg2-binary==2.9.9
+
+# Market Data
+yfinance==0.2.40
+
+# Data Processing
+pandas==2.2.2
+numpy==1.26.4
+scipy==1.13.0
+matplotlib==3.9.0
+
+# Machine Learning
+scikit-learn==1.5.0
+xgboost==2.0.3
+shap==0.45.1
+
+# Deep Learning (PyTorch CPU)
+torch==2.3.0+cpu
+torchvision==0.18.0+cpu
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# NLP / Sentiment
+transformers==4.41.2
+huggingface-hub==0.23.2
+
+# HTTP Client
+httpx==0.27.0
+requests==2.32.2
+
+# Logging / Utilities
+python-dotenv==1.0.1
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+tenacity==8.3.0
+structlog==24.2.0
+
+# Testing
+pytest==8.2.1
+pytest-asyncio==0.23.7
+httpx==0.27.0
