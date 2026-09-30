@@ -1,31 +1,5 @@
-@import "tailwindcss";
-
-@theme {
-  --color-brand-50: #eef2ff;
-  --color-brand-100: #e0e7ff;
-  --color-brand-200: #c7d2fe;
-  --color-brand-400: #818cf8;
-  --color-brand-500: #6366f1;
-  --color-brand-600: #4f46e5;
-  --color-brand-700: #4338ca;
-  --color-brand-900: #1e1b4b;
-
-  --color-surface-900: #0a0a0f;
-  --color-surface-800: #0f0f1a;
-  --color-surface-700: #141428;
-  --color-surface-600: #1a1a35;
-  --color-surface-500: #21213e;
-
-  --color-up: #22c55e;
-  --color-down: #ef4444;
-  --color-neutral: #f59e0b;
-
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-display: 'Plus Jakarta Sans', sans-serif;
-}
-
-/* Import Google Fonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+@import "tailwindcss";
 
 /* Base styles */
 *, *::before, *::after {
