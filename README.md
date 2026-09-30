@@ -492,14 +492,13 @@ POST /api/backtest                  Run backtest
 
 ## 🙋 Author
 
-**[Your Name]**
+NIKHIL YADAV
 MCA (Artificial Intelligence & Machine Learning)
-[Your University]
 
-- GitHub: [@yourusername](https://github.com/yourusername)
-- LinkedIn: [Your Profile](https://linkedin.com/in/yourprofile)
 
----
+
+
+
 
 ## ⚖️ Disclaimer
 
