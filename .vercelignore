@@ -14,9 +14,12 @@ backend/tests
 backend/models
 *.pkl
 *.pt
-data/processed
-data/sample
-data/raw
+data
 backend/data/raw
+backend/data/dev.db
+backend/data/seed.db
+*.png
+*.jpg
+*.jpeg
 frontend/node_modules
 .git

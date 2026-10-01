@@ -120,34 +120,70 @@ class MarketDataProvider:
 # ─── yfinance Provider ───────────────────────────────────────────────────────
 
 class YFinanceProvider(MarketDataProvider):
-    """Free market data via yfinance. No API key required."""
+    """Free market data via yfinance or direct Yahoo Finance API fallback."""
 
     def fetch_ohlcv(self, symbol: str, start: date, end: date) -> pd.DataFrame:
-        import yfinance as yf  # lazy import
+        try:
+            import yfinance as yf
+            ticker = yf.Ticker(symbol)
+            df = ticker.history(
+                start=start.isoformat(),
+                end=(end + timedelta(days=1)).isoformat(),
+                auto_adjust=True,
+                actions=False,
+            )
+            if not df.empty:
+                df.index = _safe_to_datetime_index(df.index)
+                df = df[["Open", "High", "Low", "Close", "Volume"]].rename(
+                    columns={"Open": "Open", "High": "High", "Low": "Low", "Close": "Close", "Volume": "Volume"}
+                )
+                df["Adj_Close"] = df["Close"]
+                df.index.name = "Date"
+                return df.sort_index()
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.warning("yfinance package fetch failed, falling back to direct API", symbol=symbol, error=str(e))
 
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(
-            start=start.isoformat(),
-            end=(end + timedelta(days=1)).isoformat(),  # yf end is exclusive
-            auto_adjust=True,
-            actions=False,
-        )
-        if df.empty:
-            raise ValueError(f"No data returned for {symbol} from {start} to {end}")
+        # Direct Yahoo Finance API fallback using standard requests (zero extra dependencies)
+        import requests
+        try:
+            p1 = int(datetime.combine(start, datetime.min.time()).timestamp())
+            p2 = int(datetime.combine(end + timedelta(days=1), datetime.min.time()).timestamp())
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?period1={p1}&period2={p2}&interval=1d"
+            res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=12)
+            data = res.json()
+            results = data.get("chart", {}).get("result")
+            if not results:
+                raise ValueError(f"No data returned for {symbol}")
 
-        df.index = _safe_to_datetime_index(df.index)
-        df = df[["Open", "High", "Low", "Close", "Volume"]].rename(
-            columns={"Open": "Open", "High": "High", "Low": "Low", "Close": "Close", "Volume": "Volume"}
-        )
-        df["Adj_Close"] = df["Close"]  # yfinance auto_adjust already adjusts Close
-        df.index.name = "Date"
-        df = df.sort_index()
-        return df
+            item = results[0]
+            timestamps = item.get("timestamp", [])
+            quotes = item.get("indicators", {}).get("quote", [{}])[0]
+            dates = [datetime.fromtimestamp(ts).date() for ts in timestamps]
+
+            df = pd.DataFrame(
+                {
+                    "Open": quotes.get("open", []),
+                    "High": quotes.get("high", []),
+                    "Low": quotes.get("low", []),
+                    "Close": quotes.get("close", []),
+                    "Volume": quotes.get("volume", []),
+                },
+                index=pd.DatetimeIndex(dates),
+            )
+            df["Adj_Close"] = df["Close"]
+            df.index.name = "Date"
+            df = df.dropna().sort_index()
+            if df.empty:
+                raise ValueError(f"Empty data for {symbol}")
+            return df
+        except Exception as exc:
+            raise ValueError(f"Failed to fetch market data for {symbol}: {exc}")
 
     def fetch_info(self, symbol: str) -> dict:
-        import yfinance as yf
-
         try:
+            import yfinance as yf
             info = yf.Ticker(symbol).info
             return {
                 "name": info.get("longName") or info.get("shortName"),
@@ -156,6 +192,19 @@ class YFinanceProvider(MarketDataProvider):
                 "market_cap": info.get("marketCap"),
                 "currency": info.get("currency", "USD"),
                 "exchange": info.get("exchange"),
+            }
+        except Exception:
+            pass
+
+        try:
+            import requests
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1d&interval=1d"
+            res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
+            meta = res.json()["chart"]["result"][0]["meta"]
+            return {
+                "name": meta.get("shortName") or meta.get("symbol"),
+                "currency": meta.get("currency", "USD"),
+                "exchange": meta.get("exchangeName"),
             }
         except Exception as exc:
             logger.warning("yfinance info fetch failed", symbol=symbol, error=str(exc))
