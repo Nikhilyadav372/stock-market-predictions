@@ -2,11 +2,14 @@
 Application configuration using Pydantic Settings.
 All secrets are loaded from environment variables - never hardcoded here.
 """
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_IS_VERCEL = bool(os.environ.get("VERCEL"))
 
 
 class Settings(BaseSettings):
@@ -21,7 +24,11 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
     # Database
-    DATABASE_URL: str = "postgresql://stockuser:stockpassword@localhost:5432/stockdb"
+    DATABASE_URL: str = (
+        "sqlite:////tmp/dev.db"
+        if _IS_VERCEL
+        else "sqlite:///./data/dev.db"
+    )
 
     # Market Data
     MARKET_DATA_PROVIDER: Literal["yfinance", "alpha_vantage", "polygon"] = "yfinance"
@@ -33,8 +40,8 @@ class Settings(BaseSettings):
     NEWS_API_KEY: str = ""
 
     # Paths
-    MODEL_ARTIFACTS_DIR: Path = Path("./models")
-    DATA_DIR: Path = Path("./data")
+    MODEL_ARTIFACTS_DIR: Path = Path("/tmp/models") if _IS_VERCEL else Path("./models")
+    DATA_DIR: Path = Path("/tmp/data") if _IS_VERCEL else Path("./data")
 
     @property
     def allowed_origins_list(self) -> list[str]:

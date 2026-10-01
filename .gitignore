@@ -70,3 +70,4 @@ postgres_data/
 tmp/
 temp/
 *.tmp
+cloudflared.exe

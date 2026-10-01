@@ -24,18 +24,15 @@ if _db_url.startswith("postgresql"):
         _engine_kwargs.update({"pool_size": 10, "max_overflow": 20})
     except ImportError:
         import os
-        _sqlite_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "data", "dev.db")
-        )
+        if os.environ.get("VERCEL"):
+            _sqlite_path = "/tmp/dev.db"
+        else:
+            _sqlite_path = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "..", "..", "data", "dev.db")
+            )
         os.makedirs(os.path.dirname(_sqlite_path), exist_ok=True)
         _db_url = f"sqlite:///{_sqlite_path}"
         _engine_kwargs["connect_args"] = {"check_same_thread": False}
-        import warnings
-        warnings.warn(
-            f"psycopg2 not found — falling back to SQLite at {_sqlite_path}. "
-            "Install psycopg2-binary and run PostgreSQL for production use.",
-            stacklevel=2,
-        )
 elif _db_url.startswith("sqlite"):
     _engine_kwargs["connect_args"] = {"check_same_thread": False}
 
