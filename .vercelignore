@@ -1,5 +1,6 @@
-# Ignore heavy binaries and local virtual environments
+# Ignore heavy binaries, virtual environments, tests, docs
 cloudflared.exe
+*.exe
 backend/venv
 venv
 .venv
@@ -10,7 +11,12 @@ docs
 scripts
 tests
 backend/tests
-frontend/node_modules
+backend/models
 *.pkl
 *.pt
-*.exe
+data/processed
+data/sample
+data/raw
+backend/data/raw
+frontend/node_modules
+.git
