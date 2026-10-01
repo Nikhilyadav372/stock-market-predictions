@@ -26,19 +26,40 @@ from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import Ridge
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (
-    accuracy_score,
-    f1_score,
-    mean_absolute_error,
-    mean_squared_error,
-    r2_score,
-    roc_auc_score,
-)
-from sklearn.preprocessing import StandardScaler
-import xgboost as xgb
+try:
+    from sklearn.linear_model import Ridge
+    from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import (
+        accuracy_score,
+        f1_score,
+        mean_absolute_error,
+        mean_squared_error,
+        r2_score,
+        roc_auc_score,
+    )
+    from sklearn.preprocessing import StandardScaler
+    _SKLEARN_AVAILABLE = True
+except ImportError:
+    Ridge = None
+    RandomForestRegressor = None
+    RandomForestClassifier = None
+    LogisticRegression = None
+    StandardScaler = None
+    _SKLEARN_AVAILABLE = False
+    def mean_absolute_error(y_true, y_pred): return float(np.mean(np.abs(y_true - y_pred)))
+    def mean_squared_error(y_true, y_pred): return float(np.mean((y_true - y_pred) ** 2))
+    def r2_score(y_true, y_pred): return 0.0
+    def accuracy_score(y_true, y_pred): return float(np.mean(y_true == y_pred))
+    def f1_score(y_true, y_pred, **kwargs): return 0.0
+    def roc_auc_score(y_true, y_pred, **kwargs): return 0.5
+
+try:
+    import xgboost as xgb
+    _XGB_AVAILABLE = True
+except ImportError:
+    xgb = None
+    _XGB_AVAILABLE = False
 
 from app.config import get_settings
 from app.logging_config import get_logger
@@ -476,8 +497,6 @@ class ModelPredictor:
 
         Returns a list of {period, value, direction} dicts.
         """
-        import torch
-
         feat_df = build_features(df_raw, include_sentiment=include_sentiment)
         feature_cols = [c for c in self.feature_cols if c in feat_df.columns]
 
@@ -494,6 +513,10 @@ class ModelPredictor:
             return results
 
         if self.model_type in ("lstm", "gru"):
+            try:
+                import torch
+            except ImportError:
+                raise ValueError("PyTorch is not installed in this environment.")
             X_all = self.scaler.transform(feat_df[feature_cols].values)
             if len(X_all) < self.lookback:
                 raise ValueError(f"Need at least {self.lookback} rows; got {len(X_all)}")

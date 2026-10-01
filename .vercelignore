@@ -1,0 +1,16 @@
+# Ignore heavy binaries and local virtual environments
+cloudflared.exe
+backend/venv
+venv
+.venv
+*.bat
+*.ps1
+notebooks
+docs
+scripts
+tests
+backend/tests
+frontend/node_modules
+*.pkl
+*.pt
+*.exe
