@@ -43,6 +43,7 @@ models/*.pb
 # === Data ===
 *.db
 *.sqlite
+!backend/data/seed.db
 data/raw/*.csv
 data/processed/*.csv
 # Keep sample data
