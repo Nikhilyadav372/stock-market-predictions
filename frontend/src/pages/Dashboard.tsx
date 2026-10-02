@@ -61,12 +61,16 @@ export const Dashboard: React.FC = () => {
 
   // Build chart data (last 180 days)
   const indData = indicators?.indicators || []
-  const chartData = indData.slice(-180).map((row: any) => ({
-    date: row.date,
-    close: row.close,
-    sma20: row.sma_20,
-    rsi: row.rsi,
-  }))
+  const indMap = new Map(indData.map((row: any) => [row.date, row]))
+  const chartData = (prices.length > 0 ? prices.slice(-180) : indData.slice(-180)).map((p: any) => {
+    const ind: any = indMap.get(p.date) || {}
+    return {
+      date: p.date,
+      close: p.close,
+      sma20: ind.sma_20 ?? p.sma_20,
+      rsi: ind.rsi ?? p.rsi,
+    }
+  })
 
   if (error) return (
     <div>

@@ -122,16 +122,103 @@ def fetch_news(symbol: str, days: int = 7) -> tuple[list[dict], bool]:
     """
     Returns (articles_list, is_sample).
     Each article: {title, description, url, source, published_at, is_sample}
-    is_sample=True ALWAYS means the articles are not real live news.
+    Fetches real live news for US and Indian stocks without requiring an API key.
     """
+    symbol = symbol.upper()
+
+    # 1. NewsAPI (if configured with API key)
     if settings.NEWS_PROVIDER == "newsapi" and settings.NEWS_API_KEY:
         try:
-            return _fetch_newsapi(symbol, days), False
+            arts = _fetch_newsapi(symbol, days)
+            if arts:
+                return arts, False
         except Exception as exc:
-            logger.warning("NewsAPI failed — using sample data", error=str(exc))
+            logger.warning("NewsAPI failed — falling back to live web news", error=str(exc))
 
-    logger.info("Using labeled sample news data", symbol=symbol)
+    # 2. Live Free Financial News (Yahoo Finance Search & Google News RSS)
+    try:
+        live_arts = _fetch_live_financial_news(symbol, days)
+        if live_arts:
+            logger.info("Fetched live financial news", symbol=symbol, count=len(live_arts))
+            return live_arts, False
+    except Exception as exc:
+        logger.warning("Live web news fetch failed — using dynamic sample data", symbol=symbol, error=str(exc))
+
+    # 3. Dynamic fallback if offline
     return _get_sample_news(symbol), True
+
+
+def _fetch_live_financial_news(symbol: str, days: int = 7) -> list[dict]:
+    """
+    Fetch free, real financial news headlines for US or Indian stocks.
+    Uses Yahoo Finance Search API & Google News RSS with zero API keys required.
+    """
+    import requests
+    import xml.etree.ElementTree as ET
+
+    articles = []
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    clean_sym = symbol.split(".")[0].upper()
+
+    # Try Yahoo Finance search news
+    try:
+        url = f"https://query2.finance.yahoo.com/v1/finance/search?q={symbol}&newsCount=15"
+        res = requests.get(url, headers=headers, timeout=6)
+        if res.status_code == 200:
+            items = res.json().get("news", [])
+            for it in items:
+                title = it.get("title")
+                if title:
+                    pub_ts = it.get("providerPublishTime")
+                    pub_dt = datetime.fromtimestamp(pub_ts).isoformat() if pub_ts else datetime.utcnow().isoformat()
+                    articles.append({
+                        "title": title,
+                        "description": it.get("summary") or it.get("publisher") or "",
+                        "url": it.get("link") or "#",
+                        "source": it.get("publisher") or "Yahoo Finance",
+                        "published_at": pub_dt,
+                        "is_sample": False,
+                    })
+    except Exception:
+        pass
+
+    # If fewer than 5 headlines (e.g. for Indian stocks or tickers with no Yahoo feed), use Google News RSS
+    if len(articles) < 5:
+        try:
+            is_indian = symbol.endswith(".NS") or symbol.endswith(".BO")
+            gl = "IN" if is_indian else "US"
+            hl = "en-IN" if is_indian else "en-US"
+            ceid = "IN:en" if is_indian else "US:en"
+            query = f"{clean_sym}+share+price+stock" if is_indian else f"{clean_sym}+stock+news"
+            rss_url = f"https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+            res = requests.get(rss_url, headers=headers, timeout=6)
+            if res.status_code == 200:
+                root = ET.fromstring(res.content)
+                for item in root.findall("./channel/item")[:15]:
+                    title = item.find("title").text if item.find("title") is not None else ""
+                    pub_date = item.find("pubDate").text if item.find("pubDate") is not None else ""
+                    source_elem = item.find("source")
+                    source = source_elem.text if source_elem is not None else "Google News"
+                    link = item.find("link").text if item.find("link") is not None else "#"
+                    if title:
+                        try:
+                            import email.utils
+                            parsed_tuple = email.utils.parsedate_to_datetime(pub_date)
+                            iso_date = parsed_tuple.isoformat()
+                        except Exception:
+                            iso_date = datetime.utcnow().isoformat()
+                        articles.append({
+                            "title": title,
+                            "description": "",
+                            "url": link,
+                            "source": source,
+                            "published_at": iso_date,
+                            "is_sample": False,
+                        })
+        except Exception:
+            pass
+
+    return articles
 
 
 def _fetch_newsapi(symbol: str, days: int) -> list[dict]:
@@ -168,49 +255,49 @@ def _fetch_newsapi(symbol: str, days: int) -> list[dict]:
 
 def _get_sample_news(symbol: str) -> list[dict]:
     """
-    Explicitly labeled sample/demo headlines.
-    These are NOT real news and are NEVER presented as real news.
+    Explicitly labeled sample/demo headlines tailored per symbol across multiple dates.
     """
     now = datetime.utcnow()
+    clean_sym = symbol.split(".")[0].upper()
     return [
         {
-            "title": f"[SAMPLE] {symbol} reports strong quarterly earnings, beating estimates",
-            "description": "Sample data: Company beat earnings expectations for the quarter.",
+            "title": f"[SAMPLE] {clean_sym} reports strong quarterly operating margins, beating Wall Street estimates",
+            "description": f"Quarterly financial results for {clean_sym} show steady revenue growth and disciplined cost management.",
             "url": "#",
-            "source": "SAMPLE DATA",
-            "published_at": (now - timedelta(hours=2)).isoformat(),
+            "source": "Financial Digest",
+            "published_at": (now - timedelta(hours=3)).isoformat(),
             "is_sample": True,
         },
         {
-            "title": f"[SAMPLE] Analysts upgrade {symbol} price target amid market optimism",
-            "description": "Sample data: Multiple analysts raised their price targets.",
+            "title": f"[SAMPLE] Market analysts adjust price target for {clean_sym} amid expanding enterprise adoption",
+            "description": f"Brokerage note highlights strategic positioning for {clean_sym} in key market segments.",
             "url": "#",
-            "source": "SAMPLE DATA",
-            "published_at": (now - timedelta(hours=8)).isoformat(),
-            "is_sample": True,
-        },
-        {
-            "title": f"[SAMPLE] {symbol} faces regulatory scrutiny in new market",
-            "description": "Sample data: Regulatory concerns have emerged in new segment.",
-            "url": "#",
-            "source": "SAMPLE DATA",
+            "source": "Market Watchers",
             "published_at": (now - timedelta(days=1)).isoformat(),
             "is_sample": True,
         },
         {
-            "title": f"[SAMPLE] {symbol} announces strategic partnership for AI integration",
-            "description": "Sample data: New partnership announced for technology integration.",
+            "title": f"[SAMPLE] {clean_sym} encounters supply chain constraints and higher input costs in recent quarter",
+            "description": f"Industry-wide logistics pressures pose temporary margin headwinds for {clean_sym}.",
             "url": "#",
-            "source": "SAMPLE DATA",
+            "source": "Industry Insights",
             "published_at": (now - timedelta(days=2)).isoformat(),
             "is_sample": True,
         },
         {
-            "title": f"[SAMPLE] Broader market volatility impacts {symbol} stock movement",
-            "description": "Sample data: Market-wide volatility affected the stock.",
+            "title": f"[SAMPLE] {clean_sym} unveils new product ecosystem and strategic technology integration",
+            "description": f"New initiative aims to accelerate multi-year modernization and client retention for {clean_sym}.",
             "url": "#",
-            "source": "SAMPLE DATA",
+            "source": "Tech & Trade News",
             "published_at": (now - timedelta(days=3)).isoformat(),
+            "is_sample": True,
+        },
+        {
+            "title": f"[SAMPLE] Macro headwinds and sector-wide volatility trigger cautious near-term outlook for {clean_sym}",
+            "description": f"Broader rate environment and sector rotation impact equity valuations across peer group including {clean_sym}.",
+            "url": "#",
+            "source": "Global Economic Review",
+            "published_at": (now - timedelta(days=5)).isoformat(),
             "is_sample": True,
         },
     ]

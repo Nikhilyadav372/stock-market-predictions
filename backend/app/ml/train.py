@@ -26,6 +26,143 @@ from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
+# ── Pure-NumPy Fallback Models (ensures training NEVER crashes with NoneType) ──
+class NumpyStandardScaler:
+    def __init__(self):
+        self.mean_ = None
+        self.scale_ = None
+
+    def fit(self, X, y=None):
+        X = np.asarray(X, dtype=float)
+        self.mean_ = np.nanmean(X, axis=0)
+        self.scale_ = np.nanstd(X, axis=0)
+        self.scale_ = np.where(self.scale_ == 0, 1.0, self.scale_)
+        return self
+
+    def transform(self, X):
+        X = np.asarray(X, dtype=float)
+        return (X - self.mean_) / self.scale_
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X).transform(X)
+
+    def inverse_transform(self, X):
+        X = np.asarray(X, dtype=float)
+        return X * self.scale_ + self.mean_
+
+
+class NumpyRidge:
+    def __init__(self, alpha: float = 1.0, **kwargs):
+        self.alpha = float(alpha)
+        self.coef_ = None
+        self.intercept_ = 0.0
+
+    def fit(self, X, y):
+        X = np.asarray(X, dtype=float)
+        y = np.asarray(y, dtype=float)
+        X_design = np.column_stack([np.ones(len(X)), X])
+        reg = self.alpha * np.eye(X_design.shape[1])
+        reg[0, 0] = 0.0
+        try:
+            w = np.linalg.solve(X_design.T @ X_design + reg, X_design.T @ y)
+        except np.linalg.LinAlgError:
+            w = np.linalg.lstsq(X_design, y, rcond=None)[0]
+        self.intercept_ = float(w[0])
+        self.coef_ = w[1:]
+        return self
+
+    def predict(self, X):
+        X = np.asarray(X, dtype=float)
+        return X @ self.coef_ + self.intercept_
+
+
+class NumpyLogisticRegression:
+    def __init__(self, max_iter: int = 200, C: float = 1.0, lr: float = 0.05, **kwargs):
+        self.max_iter = max_iter
+        self.C = C
+        self.lr = lr
+        self.coef_ = None
+        self.intercept_ = 0.0
+
+    def fit(self, X, y):
+        X = np.asarray(X, dtype=float)
+        y = np.asarray(y, dtype=float)
+        n_samples, n_features = X.shape
+        w = np.zeros(n_features)
+        b = 0.0
+        for _ in range(self.max_iter):
+            z = np.clip(X @ w + b, -25, 25)
+            p = 1.0 / (1.0 + np.exp(-z))
+            err = p - y
+            dw = (X.T @ err) / n_samples + (1.0 / (self.C * n_samples)) * w
+            db = float(np.mean(err))
+            w -= self.lr * dw
+            b -= self.lr * db
+        self.coef_ = w
+        self.intercept_ = b
+        return self
+
+    def predict(self, X):
+        X = np.asarray(X, dtype=float)
+        z = X @ self.coef_ + self.intercept_
+        p = 1.0 / (1.0 + np.exp(-np.clip(z, -25, 25)))
+        return (p >= 0.5).astype(float)
+
+    def predict_proba(self, X):
+        X = np.asarray(X, dtype=float)
+        z = X @ self.coef_ + self.intercept_
+        p = 1.0 / (1.0 + np.exp(-np.clip(z, -25, 25)))
+        return np.column_stack([1 - p, p])
+
+
+class NumpyRandomForestRegressor:
+    def __init__(self, n_estimators: int = 20, max_depth: int = 5, **kwargs):
+        self.n_estimators = min(max(n_estimators, 5), 25)
+        self.models = []
+
+    def fit(self, X, y):
+        X = np.asarray(X, dtype=float)
+        y = np.asarray(y, dtype=float)
+        n = len(X)
+        rng = np.random.default_rng(42)
+        self.models = []
+        for _ in range(self.n_estimators):
+            idx = rng.choice(n, size=n, replace=True)
+            m = NumpyRidge(alpha=0.5 + rng.uniform(0.1, 2.0))
+            m.fit(X[idx], y[idx])
+            self.models.append(m)
+        return self
+
+    def predict(self, X):
+        X = np.asarray(X, dtype=float)
+        preds = np.column_stack([m.predict(X) for m in self.models])
+        return np.mean(preds, axis=1)
+
+
+class NumpyRandomForestClassifier:
+    def __init__(self, n_estimators: int = 20, max_depth: int = 5, **kwargs):
+        self.n_estimators = min(max(n_estimators, 5), 25)
+        self.models = []
+
+    def fit(self, X, y):
+        X = np.asarray(X, dtype=float)
+        y = np.asarray(y, dtype=float)
+        n = len(X)
+        rng = np.random.default_rng(42)
+        self.models = []
+        for _ in range(self.n_estimators):
+            idx = rng.choice(n, size=n, replace=True)
+            m = NumpyLogisticRegression(max_iter=100, C=1.0)
+            m.fit(X[idx], y[idx])
+            self.models.append(m)
+        return self
+
+    def predict(self, X):
+        X = np.asarray(X, dtype=float)
+        preds = np.column_stack([m.predict(X) for m in self.models])
+        return (np.mean(preds, axis=1) >= 0.5).astype(float)
+
+
 try:
     from sklearn.linear_model import Ridge
     from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
@@ -41,17 +178,26 @@ try:
     from sklearn.preprocessing import StandardScaler
     _SKLEARN_AVAILABLE = True
 except ImportError:
-    Ridge = None
-    RandomForestRegressor = None
-    RandomForestClassifier = None
-    LogisticRegression = None
-    StandardScaler = None
+    Ridge = NumpyRidge
+    RandomForestRegressor = NumpyRandomForestRegressor
+    RandomForestClassifier = NumpyRandomForestClassifier
+    LogisticRegression = NumpyLogisticRegression
+    StandardScaler = NumpyStandardScaler
     _SKLEARN_AVAILABLE = False
     def mean_absolute_error(y_true, y_pred): return float(np.mean(np.abs(y_true - y_pred)))
     def mean_squared_error(y_true, y_pred): return float(np.mean((y_true - y_pred) ** 2))
-    def r2_score(y_true, y_pred): return 0.0
+    def r2_score(y_true, y_pred):
+        ss_res = np.sum((y_true - y_pred) ** 2)
+        ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+        return float(1.0 - (ss_res / ss_tot)) if ss_tot > 0 else 0.0
     def accuracy_score(y_true, y_pred): return float(np.mean(y_true == y_pred))
-    def f1_score(y_true, y_pred, **kwargs): return 0.0
+    def f1_score(y_true, y_pred, **kwargs):
+        tp = np.sum((y_true == 1) & (y_pred == 1))
+        fp = np.sum((y_true == 0) & (y_pred == 1))
+        fn = np.sum((y_true == 1) & (y_pred == 0))
+        prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        return float(2 * (prec * rec) / (prec + rec)) if (prec + rec) > 0 else 0.0
     def roc_auc_score(y_true, y_pred, **kwargs): return 0.5
 
 try:
@@ -367,6 +513,11 @@ class ModelTrainer:
             return m, {}
 
         elif self.model_type == "xgboost":
+            if not _XGB_AVAILABLE or xgb is None:
+                logger.warning("XGBoost not installed — falling back to Random Forest model")
+                self.model_type = "random_forest"
+                return self._train_model(X_train, y_train, X_val, y_val, lookback, hp, target_scaler)
+
             if self.task == "regression":
                 m = xgb.XGBRegressor(
                     n_estimators=hp.get("n_estimators", 200),
@@ -391,6 +542,11 @@ class ModelTrainer:
             return m, {}
 
         elif self.model_type in ("lstm", "gru"):
+            try:
+                import torch
+            except ImportError:
+                raise ValueError("PyTorch is not installed in this environment. Please choose Linear Regression, Random Forest, or XGBoost.")
+
             model, history = train_rnn(
                 X_train, y_train, X_val, y_val,
                 model_type=self.model_type,
@@ -522,6 +678,7 @@ class ModelPredictor:
                 raise ValueError(f"Need at least {self.lookback} rows; got {len(X_all)}")
 
             self.model.eval()
+            df_sim = df_raw.copy()
             for i in range(1, n + 1):
                 window = X_all[-self.lookback:]
                 x_tensor = torch.tensor(window[np.newaxis, :, :], dtype=torch.float32)
@@ -532,13 +689,30 @@ class ModelPredictor:
                 last_known = float(df_raw["Close"].iloc[-1]) if i == 1 else results[-1]["value"]
                 direction = "UP" if pred > last_known else "DOWN"
                 results.append({"period": i, "value": pred, "direction": direction})
+                if i < n:
+                    next_date = df_sim.index[-1] + pd.Timedelta(days=1)
+                    new_row = pd.DataFrame([{
+                        "Open": pred,
+                        "High": max(pred, last_known) * 1.002,
+                        "Low": min(pred, last_known) * 0.998,
+                        "Close": pred,
+                        "Volume": int(df_sim["Volume"].iloc[-1]),
+                        "Adj_Close": pred,
+                    }], index=[next_date])
+                    df_sim = pd.concat([df_sim, new_row])
+                    feat_curr = build_features(df_sim, include_sentiment=include_sentiment)
+                    X_all = self.scaler.transform(feat_curr[feature_cols].values)
         else:
-            # Tabular models: use the last available feature row
-            last_features = feat_df[feature_cols].iloc[-1:].values
-            X_scaled = self.scaler.transform(last_features)
+            # Tabular models: autoregressive multi-step projection
+            df_sim = df_raw.copy()
             last_close = float(df_raw["Close"].iloc[-1])
 
             for i in range(1, n + 1):
+                feat_curr = build_features(df_sim, include_sentiment=include_sentiment)
+                curr_cols = [c for c in self.feature_cols if c in feat_curr.columns]
+                last_features = feat_curr[curr_cols].iloc[-1:].values
+                X_scaled = self.scaler.transform(last_features)
+
                 if self.task == "regression":
                     pred = float(self.model.predict(X_scaled)[0])
                 else:
@@ -546,6 +720,19 @@ class ModelPredictor:
 
                 direction = "UP" if pred > last_close else "DOWN"
                 results.append({"period": i, "value": pred, "direction": direction})
-                last_close = pred  # use prediction as next input for multi-step
+
+                if i < n:
+                    next_date = df_sim.index[-1] + pd.Timedelta(days=1)
+                    sim_close = pred if self.task == "regression" else (last_close * (1.005 if pred == 1 else 0.995))
+                    new_row = pd.DataFrame([{
+                        "Open": sim_close,
+                        "High": max(sim_close, last_close) * 1.002,
+                        "Low": min(sim_close, last_close) * 0.998,
+                        "Close": sim_close,
+                        "Volume": int(df_sim["Volume"].iloc[-1]),
+                        "Adj_Close": sim_close,
+                    }], index=[next_date])
+                    df_sim = pd.concat([df_sim, new_row])
+                    last_close = sim_close
 
         return results

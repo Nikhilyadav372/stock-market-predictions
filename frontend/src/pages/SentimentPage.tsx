@@ -42,10 +42,16 @@ export const SentimentPage: React.FC = () => {
   const scoreColor = overallScore > 0.05 ? '#22c55e' : overallScore < -0.05 ? '#ef4444' : '#f59e0b'
   const label = sentiment?.overall_label ?? 'neutral'
 
-  const pieData = sentiment ? [
-    { name: 'Positive', value: sentiment.daily_sentiment.length > 0 ? parseFloat((sentiment.daily_sentiment.reduce((a: number, d: any) => a + d.positive, 0) / sentiment.daily_sentiment.length * 100).toFixed(1)) : 0, color: '#22c55e' },
-    { name: 'Neutral', value: sentiment.daily_sentiment.length > 0 ? parseFloat((sentiment.daily_sentiment.reduce((a: number, d: any) => a + d.neutral, 0) / sentiment.daily_sentiment.length * 100).toFixed(1)) : 0, color: '#f59e0b' },
-    { name: 'Negative', value: sentiment.daily_sentiment.length > 0 ? parseFloat((sentiment.daily_sentiment.reduce((a: number, d: any) => a + d.negative, 0) / sentiment.daily_sentiment.length * 100).toFixed(1)) : 0, color: '#ef4444' },
+  const headlines = sentiment?.headlines || []
+  const posCount = headlines.filter((h: any) => h.sentiment === 'positive').length
+  const neuCount = headlines.filter((h: any) => h.sentiment === 'neutral').length
+  const negCount = headlines.filter((h: any) => h.sentiment === 'negative').length
+  const totalCount = headlines.length || 1
+
+  const pieData = headlines.length > 0 ? [
+    { name: 'Positive', value: parseFloat(((posCount / totalCount) * 100).toFixed(1)), color: '#22c55e' },
+    { name: 'Neutral', value: parseFloat(((neuCount / totalCount) * 100).toFixed(1)), color: '#f59e0b' },
+    { name: 'Negative', value: parseFloat(((negCount / totalCount) * 100).toFixed(1)), color: '#ef4444' },
   ] : []
 
   return (
@@ -113,7 +119,7 @@ export const SentimentPage: React.FC = () => {
       )}
 
       {/* Daily Trend */}
-      {sentiment && sentiment.daily_sentiment.length > 1 && (
+      {sentiment && sentiment.daily_sentiment?.length > 0 && (
         <div className="glass-card" style={{ padding: 24 }}>
           <p style={{ fontWeight: 700, color: '#e2e8f0', marginBottom: 16 }}>Daily Sentiment Trend</p>
           <ResponsiveContainer width="100%" height={200}>

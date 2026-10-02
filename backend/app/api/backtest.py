@@ -11,6 +11,7 @@ from app.models import Backtest, MLModel, Stock
 from app.schemas import BacktestRequest, BacktestResponse, EquityPoint
 from app.services.market_data import MarketDataService
 from app.ml.train import ModelPredictor
+from app.ml.features import build_features
 from app.backtesting.engine import run_backtest
 from app.logging_config import get_logger
 
@@ -52,19 +53,32 @@ def run_backtest_endpoint(req: BacktestRequest, db: Session = Depends(get_db)):
     if len(backtest_df) < 10:
         raise HTTPException(status_code=422, detail="Not enough data in the selected backtest period.")
 
-    # Generate one prediction per day using rolling windows
-    # For each day, we use only data up to that day (no future leakage)
+    # Build features once (all features strictly use past data, no lookahead bias)
+    feat_df = build_features(df_raw, include_sentiment=(ml_model.feature_set == "market+sentiment"))
+    feature_cols = [c for c in predictor.feature_cols if c in feat_df.columns]
+
+    # Generate one prediction per day
     directions = []
-    for i in range(len(backtest_df)):
-        # Use data up to (but not including) day i+1
-        available_data = df_raw[df_raw.index <= backtest_df.index[i]]
-        if len(available_data) < 70:
-            directions.append("HOLD")
-            continue
-        try:
-            preds = predictor.predict_next_n(available_data, n=1)
-            directions.append(preds[0].get("direction", "HOLD") if preds else "HOLD")
-        except Exception:
+    for d in backtest_df.index:
+        if d in feat_df.index:
+            try:
+                row_features = feat_df.loc[[d], feature_cols].values
+                X_scaled = predictor.scaler.transform(row_features)
+                if predictor.model_type in ("lstm", "gru"):
+                    available_data = df_raw[df_raw.index <= d]
+                    preds = predictor.predict_next_n(available_data, n=1)
+                    directions.append(preds[0].get("direction", "HOLD") if preds else "HOLD")
+                else:
+                    pred = predictor.model.predict(X_scaled)[0]
+                    if predictor.task == "regression":
+                        last_price = float(df_raw.loc[d, "Close"]) if "Close" in df_raw.columns else float(pred)
+                        direction = "UP" if pred > last_price else "DOWN"
+                    else:
+                        direction = "UP" if (pred == 1 or pred > 0.5) else "DOWN"
+                    directions.append(direction)
+            except Exception:
+                directions.append("HOLD")
+        else:
             directions.append("HOLD")
 
     # Map "HOLD" to "DOWN" (stay flat)

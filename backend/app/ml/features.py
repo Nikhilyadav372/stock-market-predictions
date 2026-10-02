@@ -30,7 +30,9 @@ def compute_rsi(series: pd.Series, window: int = 14) -> pd.Series:
     avg_gain = gain.ewm(alpha=1 / window, min_periods=window, adjust=False).mean()
     avg_loss = loss.ewm(alpha=1 / window, min_periods=window, adjust=False).mean()
     rs = avg_gain / avg_loss.replace(0, np.nan)
-    return 100 - (100 / (1 + rs))
+    rsi = 100 - (100 / (1 + rs))
+    rsi = rsi.where(~((avg_loss == 0) & (avg_gain > 0)), 100.0)
+    return rsi
 
 
 def compute_macd(
@@ -142,9 +144,9 @@ def build_features(df: pd.DataFrame, include_sentiment: bool = False) -> pd.Data
     f["high_low_range"] = (df["High"] - df["Low"]) / df["Close"]
     f["open_close_range"] = (df["Close"] - df["Open"]) / df["Open"]
 
-    # ── 52-Week High/Low (uses 252 trading days) ──────────────────────────────
-    f["52w_high"] = df["High"].rolling(252).max()
-    f["52w_low"] = df["Low"].rolling(252).min()
+    # ── 52-Week High/Low (uses up to 252 trading days) ─────────────────────────
+    f["52w_high"] = df["High"].rolling(252, min_periods=20).max()
+    f["52w_low"] = df["Low"].rolling(252, min_periods=20).min()
     f["pct_from_52w_high"] = df["Close"] / f["52w_high"] - 1
     f["pct_from_52w_low"] = df["Close"] / f["52w_low"] - 1
 
@@ -159,11 +161,14 @@ def build_features(df: pd.DataFrame, include_sentiment: bool = False) -> pd.Data
     # IMPORTANT: this creates NaN in the last row — drop before training
     f["target_close"] = df["Close"].shift(-1)
     f["target_return"] = df["Close"].pct_change().shift(-1)
-    # Classification target: 1 if next close > current close, else 0
-    f["target_direction"] = (f["target_close"] > df["Close"]).astype(float)
+    # Classification target: 1 if next close > current close, else 0 (NaN on last row)
+    f["target_direction"] = np.where(
+        f["target_close"].isna(),
+        np.nan,
+        (f["target_close"] > df["Close"]).astype(float),
+    )
 
     # Drop the first rows where rolling features are not yet available
-    # (the longest window is 252 for 52w high/low)
     f = f.dropna(subset=[c for c in f.columns if c not in ("target_close", "target_return", "target_direction")])
 
     return f

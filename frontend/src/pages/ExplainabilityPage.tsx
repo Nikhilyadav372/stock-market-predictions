@@ -87,7 +87,7 @@ export const ExplainabilityPage: React.FC = () => {
             {predictions.length === 0 && <option value="">No predictions found in database</option>}
             {predictions.map((p) => (
               <option key={p.id} value={p.id}>
-                #{p.id} — {p.stock_symbol || selectedSymbol} — {p.model_name || 'Model'} ({p.task}) — {p.created_at?.slice(0, 10)}
+                #{p.id} — {p.symbol || p.stock_symbol || selectedSymbol} — {p.model_name || 'Model'} ({p.task}) — {p.created_at?.slice(0, 10)}
               </option>
             ))}
           </select>

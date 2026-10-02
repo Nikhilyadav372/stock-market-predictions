@@ -194,7 +194,8 @@ def get_indicators(
         start_date = end_date - timedelta(days=365)
 
     try:
-        df, _ = _market_svc.fetch(symbol, start_date - timedelta(days=100), end_date)
+        # Generous warmup to ensure rolling windows (SMAs, EMAs, MACD, BB) are fully primed
+        df, _ = _market_svc.fetch(symbol, start_date - timedelta(days=365), end_date)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

@@ -40,8 +40,13 @@ export const ForecastPage: React.FC = () => {
     setLoadingModels(true)
     try {
       const { data } = await modelsApi.list(selectedSymbol)
-      setModels(data.filter((m: any) => m.has_artifact))
-      if (data.length > 0 && data[0].has_artifact) setSelectedModel(data[0].id)
+      const valid = data.filter((m: any) => m.has_artifact)
+      setModels(valid)
+      if (valid.length > 0) {
+        setSelectedModel((prev) => (valid.some((m: any) => m.id === prev) ? prev : valid[0].id))
+      } else {
+        setSelectedModel(null)
+      }
     } catch {} finally { setLoadingModels(false) }
   }, [selectedSymbol])
 

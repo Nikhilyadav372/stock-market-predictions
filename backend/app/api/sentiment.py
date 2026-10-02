@@ -63,33 +63,58 @@ def analyze_sentiment(req: SentimentAnalyzeRequest, db: Session = Depends(get_db
             )
         )
 
-    # Save aggregate daily sentiment
-    today = date.today()
-    existing = (
-        db.query(SentimentScore)
-        .filter(SentimentScore.stock_id == stock.id, SentimentScore.score_date == today)
-        .first()
-    )
-    if existing:
-        existing.compound_score = aggregate["overall_score"]
-        existing.positive = aggregate["positive"]
-        existing.neutral = aggregate["neutral"]
-        existing.negative = aggregate["negative"]
-        existing.article_count = aggregate["analyzed_count"]
-        existing.is_sample = is_sample
-    else:
-        db.add(
-            SentimentScore(
-                stock_id=stock.id,
-                score_date=today,
-                compound_score=aggregate["overall_score"],
-                positive=aggregate["positive"],
-                neutral=aggregate["neutral"],
-                negative=aggregate["negative"],
-                article_count=aggregate["analyzed_count"],
-                is_sample=is_sample,
-            )
+    # Save daily sentiment scores for each date found in articles
+    articles_by_date = {}
+    for art in articles:
+        p_dt = _parse_dt(art.get("published_at"))
+        d_val = p_dt.date() if p_dt else date.today()
+        articles_by_date.setdefault(d_val, []).append(art)
+
+    articles_by_date.setdefault(date.today(), [])
+
+    for d_val, d_arts in articles_by_date.items():
+        if d_arts:
+            d_scores = [a.get("sentiment_score", 0.0) for a in d_arts]
+            d_pos = [1 if a.get("sentiment") == "positive" else 0 for a in d_arts]
+            d_neu = [1 if a.get("sentiment") == "neutral" else 0 for a in d_arts]
+            d_neg = [1 if a.get("sentiment") == "negative" else 0 for a in d_arts]
+            count = len(d_arts)
+            d_comp = sum(d_scores) / count
+            pos_pct = sum(d_pos) / count
+            neu_pct = sum(d_neu) / count
+            neg_pct = sum(d_neg) / count
+        else:
+            d_comp = aggregate["overall_score"]
+            pos_pct = aggregate["positive"]
+            neu_pct = aggregate["neutral"]
+            neg_pct = aggregate["negative"]
+            count = aggregate["analyzed_count"]
+
+        existing = (
+            db.query(SentimentScore)
+            .filter(SentimentScore.stock_id == stock.id, SentimentScore.score_date == d_val)
+            .first()
         )
+        if existing:
+            existing.compound_score = round(d_comp, 4)
+            existing.positive = round(pos_pct, 4)
+            existing.neutral = round(neu_pct, 4)
+            existing.negative = round(neg_pct, 4)
+            existing.article_count = count
+            existing.is_sample = is_sample
+        else:
+            db.add(
+                SentimentScore(
+                    stock_id=stock.id,
+                    score_date=d_val,
+                    compound_score=round(d_comp, 4),
+                    positive=round(pos_pct, 4),
+                    neutral=round(neu_pct, 4),
+                    negative=round(neg_pct, 4),
+                    article_count=count,
+                    is_sample=is_sample,
+                )
+            )
 
     db.commit()
 
@@ -156,13 +181,6 @@ def get_sentiment(symbol: str, db: Session = Depends(get_db)):
         .all()
     )
 
-    overall = 0.0
-    if daily_rows:
-        overall = sum(r.compound_score for r in daily_rows) / len(daily_rows)
-
-    label = "positive" if overall > 0.05 else ("negative" if overall < -0.05 else "neutral")
-    has_sample = any(r.is_sample for r in daily_rows)
-
     # Re-analyze headlines from DB
     headlines = []
     for art in headlines_db:
@@ -178,6 +196,16 @@ def get_sentiment(symbol: str, db: Session = Depends(get_db)):
                 is_sample=art.is_sample,
             )
         )
+
+    if headlines:
+        overall = sum(h.score for h in headlines) / len(headlines)
+    elif daily_rows:
+        overall = sum(r.compound_score for r in daily_rows) / len(daily_rows)
+    else:
+        overall = 0.0
+
+    label = "positive" if overall > 0.05 else ("negative" if overall < -0.05 else "neutral")
+    has_sample = any(r.is_sample for r in daily_rows) if daily_rows else any(h.is_sample for h in headlines)
 
     return SentimentResponse(
         symbol=symbol,

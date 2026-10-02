@@ -77,7 +77,7 @@ def run_backtest(
         positions_held.append(1 if in_trade else 0)
 
         equity_curve.append({
-            "date": dates[i + 1].date() if hasattr(dates[i + 1], "date") else dates[i + 1],
+            "date": str(dates[i + 1].date() if hasattr(dates[i + 1], "date") else dates[i + 1]),
             "equity": round(equity, 2),
             "cumulative_return": round((equity / start_capital - 1) * 100, 4),
         })

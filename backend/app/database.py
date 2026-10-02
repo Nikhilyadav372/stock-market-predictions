@@ -35,6 +35,12 @@ if _db_url.startswith("postgresql"):
         _engine_kwargs["connect_args"] = {"check_same_thread": False}
 elif _db_url.startswith("sqlite"):
     _engine_kwargs["connect_args"] = {"check_same_thread": False}
+    import os
+    _clean_path = _db_url.replace("sqlite:///", "").split("?")[0]
+    if _clean_path and not _clean_path.startswith(":memory:"):
+        _dir = os.path.dirname(os.path.abspath(_clean_path))
+        if _dir:
+            os.makedirs(_dir, exist_ok=True)
 
 engine = create_engine(_db_url, **_engine_kwargs)
 
